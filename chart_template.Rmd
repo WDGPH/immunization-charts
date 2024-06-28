@@ -1,0 +1,91 @@
+---
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: false
+documentclass: article
+header-includes:
+  - \usepackage{amssymb}
+  - \usepackage[margin=2cm]{geometry}
+  - \usepackage{ragged2e} # text alignment utilities
+  - \usepackage{ltablex}  # tabularx with longtable functionality
+  - \usepackage{rotating} # rotating table cells
+  - \usepackage{fancyhdr} # custom page numbering
+  - \usepackage{lastpage} # support custom page number
+  - \usepackage{fontspec} # font utilities
+  - \setmainfont{Arial}   # default font type 
+params:
+  client_data: NULL
+  chart_num_diseases: NULL
+  chart_col_header: NULL
+  
+---
+
+```{=latex}
+% Custom circle indicator for vaccination history charts
+\newcommand{\mycircle}{\raisebox{-0.2\height}{\resizebox{1em}{!}{$\bullet$}}}
+
+% Removes the horizontal line under the header when using fancyhdr
+\renewcommand{\headrulewidth}{0pt}
+
+% Define a command to reset page counter and update last page reference
+\newcommand{\newdocument}{
+  \setcounter{page}{1}
+  \pagestyle{fancy}
+  \fancyhf{}
+  \fancyfoot[C]{Page \thepage\ of \pageref{LastPage}}
+  
+% ltablex setting
+\keepXColumns
+}
+```
+
+```{r, results='asis', echo=FALSE}
+# One client per row
+for (j in seq_len(nrow(params$client_data))) {
+  # Extract single row of data
+  client = as.list(params$client_data[j,])
+
+  client$`Page LaTeX` = c(
+"
+\\newdocument
+
+\\huge \\textbf{Immunization Record}
+
+\\normalsize Client ID: \\textbf{", client$`Client Id`, "}
+
+\\vspace{0.25cm}
+
+\\normalsize Below is a record of all immunizations received by the client on file with Public Health, excluding seasonal vaccinations against influenza and COVID-19.
+
+\\setlength{\\arrayrulewidth}{1pt}
+\\renewcommand{\\arraystretch}{1.25}
+\\setlength{\\tabcolsep}{1pt}
+
+\\begin{tabularx}{\\textwidth}{|l|l", rep("|>{\\centering\\arraybackslash}p{0.35cm}", params$chart_num_diseases + 1L), "|>{\\raggedright\\arraybackslash}X|}
+\\hline
+", params$chart_col_header, "\\\\
+\\hline
+\\endfirsthead
+
+\\multicolumn{", params$chart_num_diseases + 4L, "}{c}{{Continuation of immunization record}} \\\\
+\\hline
+", params$chart_col_header, "\\\\
+\\hline
+\\endhead
+
+\\multicolumn{", params$chart_num_diseases + 4L, "}{c}{{Immunization record continued on next page}} \\\\
+\\endfoot
+
+\\multicolumn{", params$chart_num_diseases + 4L, "}{c}{{End of immunization record}} \\\\
+\\endlastfoot
+",
+client$`Vaccine History LaTeX`[[1]],
+"
+\\end{tabularx}
+
+\\clearpage")
+    
+  cat(client$`Page LaTeX`, sep = "")
+  }
+```

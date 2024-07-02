@@ -52,7 +52,7 @@ for (j in seq_len(nrow(params$client_data))) {
 
 \\huge \\textbf{Immunization Record}
 
-\\normalsize Client ID: \\textbf{", client$`Client Id`, "}
+\\normalsize Client ID: \\textbf{", client$`Client ID`, "}
 
 \\vspace{0.25cm}
 

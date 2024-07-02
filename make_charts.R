@@ -3,6 +3,7 @@
 ##############
 
 # Diseases, in order, to include immunization history chart
+# Mark as 'F' to collapse the disease into the 'Other' column
 chart_diseases = c(
   'Diphtheria'    = T,
   'Tetanus'       = T,
@@ -17,7 +18,7 @@ chart_diseases = c(
   'Meningococcal' = T,
   'Varicella'     = T,
   'Hepatitis B'   = T,
-  'HPV'           = F
+  'HPV'           = T
   )
 
 # Vaccines or agents to ignore in/drop from immunization history
@@ -128,12 +129,10 @@ clients = list.files(
     readxl::read_xlsx(
       path = x,
       col_types = c(
-        rep("text", 3),
-        rep("date", 2),
-        rep("text", 3),
+        rep("text", 1),
         rep("date", 1),
-        rep("text", 8))) |>
-    select(`Client Id`, `Date of Birth`, `Received Agents`)
+        rep("text", 1))) |>
+    select(`Client ID`, `Date of Birth`, `Received Agents`)
     }) |>
 
   # Bind list of data frames

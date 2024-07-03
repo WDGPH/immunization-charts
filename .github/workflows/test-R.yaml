@@ -1,0 +1,55 @@
+name: Run test.R
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup R
+      uses: r-lib/actions/setup-r@v2
+      
+    - name: Setup renv
+      uses: r-lib/actions/setup-renv@v2
+
+    - name: Setup pandoc
+      uses: r-lib/actions/setup-pandoc@v2
+
+    - name: Install Arial font
+      run: |
+        sudo apt-get update
+        echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+        sudo apt-get install -y ttf-mscorefonts-installer
+        sudo fc-cache -fv
+        sudo fc-list
+
+    - name: Setup TinyTex
+      uses: r-lib/actions/setup-tinytex@v2
+
+    - name: Run test.R
+      run: |
+        Rscript test.R
+
+    - name: Save input artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-input
+        path: input/
+        if-no-files-found: error
+
+    - name: Save output artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-output
+        path: output/
+        if-no-files-found: error

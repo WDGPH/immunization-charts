@@ -39,3 +39,17 @@ jobs:
     - name: Run test.R
       run: |
         Rscript test.R
+
+    - name: Save input artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-input
+        path: input/
+        if-no-files-found: error
+
+    - name: Save output artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-output
+        path: output/
+        if-no-files-found: error

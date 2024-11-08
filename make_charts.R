@@ -29,14 +29,14 @@ ignore_agents = c(
   'RabIg',
   'Ig')
 
+# Used to calculate student age at time of mail delivery
+# Students 16 and older can be addressed directly
+# Letters for students under 16 should be addressed to their parent/guardian
+delivery_date = as.Date('2024-11-15')
+
 # Minimum number of rows to show in immunization history chart
 # Charts will be padded with rows as appropriate
-min_rows = 15L
-
-# Number of clients to include in a single PDF
-# Note: 10 PDFs with 10 clients each will run slower than 1 PDF with 100 clients
-# Use a batch size of 1 if you would like a single client per PDF file.
-batch_size = 10L
+min_rows = 5L
 
 ##################
 # End parameters #
@@ -54,7 +54,9 @@ library(kableExtra)
 
 # Load vaccine - disease reference table
 # Collapse as desired
-vax_ref = readxl::read_xlsx("vaccine_reference.xlsx", col_types = c("text", rep("logical", 15))) |>
+vax_ref = readxl::read_xlsx(
+  "vaccine_reference.xlsx",
+  col_types = c("text", rep("logical", 15))) |>
   rowwise() |>
   mutate(`Other` = any(
     c_across(
@@ -71,7 +73,9 @@ chart_num_diseases = sum(chart_diseases)
 
 # Format column header information for LaTeX
 chart_col_header = c(names(chart_diseases[chart_diseases == T]), "Other") |> 
-  str_replace_all(pattern = "^([\\w\\s]+)$", replacement = "\\\\rotatebox{90}{\\1}")
+  str_replace_all(
+    pattern = "^([\\w\\s]+)$",
+    replacement = "\\\\rotatebox{90}{\\1}")
 
 chart_col_header = c("Date Given", "At Age", chart_col_header, "Vaccine(s)") |>
   paste(collapse = " & ")
@@ -129,18 +133,59 @@ clients = list.files(
     readxl::read_xlsx(
       path = x,
       col_types = c(
-        rep("text", 1),
+        rep("text", 7),
         rep("date", 1),
-        rep("text", 1))) |>
-    select(`Client ID`, `Date of Birth`, `Received Agents`)
+        rep("text", 8))) |>
+    select(
+      `School` = `School Name`,
+      `Client ID` = `Client Id`,
+      `First Name`,
+      `Last Name`,
+      `Date of Birth`,
+      `Street Address Line 1`,
+      `Street Address Line 2`,
+      `City`,
+      `Province` = `Province/Territory`,
+      `Postal Code`,
+      `Vaccines Due` = `Overdue Disease`,
+      `Received Agents` = `Imms Given`
+      )
     }) |>
 
   # Bind list of data frames
   bind_rows() |>
-
+  
+  # Make text uppercase
+  mutate(
+    across(
+    .cols = all_of(c(
+      "School", "First Name", "Last Name",
+      "Street Address Line 1", "Street Address Line 2",
+      "City", "Province", "Postal Code")),
+    .fns = \(x){
+      x |>
+        str_to_upper() |>
+        str_squish() |>
+        LaTeX_escape()
+      })) |>
+  
   mutate(
     # Formatting of fields
     `Date of Birth`   = as.Date(`Date of Birth`),
+    
+    # Remove trailing commas
+    `Vaccines Due` = str_remove_all(`Vaccines Due`, pattern = ",$"),
+    `Vaccines Due` = str_replace_all(`Vaccines Due`, pattern = c(
+      "Poliomyelitis" = "Polio",
+      "Human papilloma virus infection" = "Human Papillomavirus (HPV)",
+      "Varicella" = "Varicella (Chickenpox)")),
+
+    # Create LaTeX list of due Vaccines
+    `Vaccines Due LaTeX` = str_replace_all(
+      `Vaccines Due`,
+      pattern = ", ",
+      replacement = "\n \\\\item "),
+    
     `Received Agents` = if_else(
       condition = str_detect(`Received Agents`, pattern = "^- ,$"),
       true = NA_character_,
@@ -181,11 +226,18 @@ clients = list.files(
             `Vaccine(s)`,
             pattern = "unspecified",
             replacement = "unsp"))}),
+    
+    # Calculate number of rows in vaccine history chart
+    # May be used to separate out particularly long vaccine histories which
+    # exceed two page limit
+    `Vaccine History Table Rows` = map(
+      .x = `Vaccine History Table`,
+      .f = \(x){x = x |> nrow()}),
 
     # Create a LaTeX table
     `Vaccine History LaTeX` = map(
       .x = `Vaccine History Table`,
-      .f = \(x){x |>
+      .f = \(x){x = x |>
           
         # Use circle symbol for True, blank for false
         mutate(
@@ -224,29 +276,63 @@ readr::write_csv(
   "output/vaccine_occurrences.csv")
 
 if(filter(vaccine_occurrences_table, Matched == F) |> dim() |> extract(1) > 0L){
-  stop("Unmatched vaccines detected. Review output/vaccine_occurrences.csv,
+  warning("Unmatched vaccines detected. Review output/vaccine_occurrences.csv,
        and either make additions to ignore_agents parameter, or to
        vaccine reference file (vaccine_reference.xlsx) and re-run.") 
   }
 
 rm(vaccine_occurrences)
 
-# Batch client charts for PDF generation
+# Additional data processing for notice
 clients = clients |>
-  nest_by(batch = 1 + (row_number() - 1) %/% batch_size, .keep = T) |>
-  use_series(data)
+  
+   # Final formatting and variable selection for document creation
+  rowwise() |>
+  mutate(
+    `Name` = paste(na.omit(c_across(ends_with("Name"))), collapse = " ")) |>
+  ungroup() |>
+  mutate(
+    # Non-breaking spaces within name
+    `Name` = str_replace_all(`Name`, "\\s", '~'),
+    `Birth Year`= lubridate::year(`Date of Birth`),
+    `Age 16+` = lubridate::time_length(
+      delivery_date - `Date of Birth`,
+      unit = "year") >= 16,
+    `Date of Birth` = format(`Date of Birth`, "%B %d, %Y"))
 
-for(i in seq_along(clients)){
-  rmarkdown::render(
-    input = "chart_template.Rmd",
-    output_file = paste0(
-      "Vaccination_Charts_",
-      str_pad(i, width = 4, pad = "0"),
-      ".pdf"),
-    output_dir = "output",
-    params = list(
-      client_data = clients[[i]],
-      chart_num_diseases = chart_num_diseases,
-      chart_col_header = chart_col_header),
-    quiet = T)
+# Batch clients for PDF generation
+clients = clients |>
+  nest_by(`School`, .keep = T) |>
+  use_series(data) |>
+  map(\(x) {
+    x |>
+    nest_by(`Birth Year`, .keep = T) |>
+    use_series(data)
+  })
+
+# For producing all notices:
+for (iter_facility in seq_along(clients)) {
+  for (iter_batch in seq_along(clients[[iter_facility]])) {
+    notice_data = clients[[iter_facility]][[iter_batch]]
+    notice_filename = paste0(
+      str_replace_all(notice_data$`School`[1], "\\W+", "_"),
+      "_",
+      notice_data$`Birth Year`[1],
+      ".pdf")
+    
+    cat("Building:", notice_filename, "\n")
+
+    rmarkdown::render(
+      input = "chart_template.Rmd",
+      output_file = notice_filename,
+      output_dir = "output",
+      params = list(
+        client_data = notice_data,
+        chart_num_diseases = chart_num_diseases,
+        chart_col_header = chart_col_header),
+      quiet = T)
+    
+    rm(notice_data)
+    rm(notice_filename)
   }
+}

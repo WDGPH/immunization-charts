@@ -6,14 +6,26 @@ output:
 documentclass: article
 header-includes:
   - \usepackage{amssymb}
-  - \usepackage[margin=2cm]{geometry}
+  - \usepackage{graphicx}
+  - \usepackage{multicol}
+  - \usepackage{parskip}
+  - \usepackage[margin=2cm, top=1cm]{geometry}
   - \usepackage{ragged2e} # text alignment utilities
   - \usepackage{ltablex}  # tabularx with longtable functionality
   - \usepackage{rotating} # rotating table cells
+  - \usepackage{refcount}
   - \usepackage{fancyhdr} # custom page numbering
-  - \usepackage{lastpage} # support custom page number
+  - \usepackage{afterpage} # For adding a blank page
+  - \usepackage{lastpage}
   - \usepackage{fontspec} # font utilities
-  - \setmainfont{Arial}   # default font type 
+  - \usepackage{etoolbox} # for creating toggles
+  - \usepackage{calc} # widthof function for redact
+  - \usepackage{enumitem} # for custom list types
+  - \usepackage{soul} # for better underline
+  - \setmainfont{Arial} # default font type 
+  - \usepackage{xcolor} # for custom colours
+  - \newcounter{letter} # Counter for letters
+  - \usepackage{needspace}
 params:
   client_data: NULL
   chart_num_diseases: NULL
@@ -22,22 +34,71 @@ params:
 ---
 
 ```{=latex}
+% Redaction functionality
+\newtoggle{toggle_redact}
+% \toggletrue{toggle_redact} % Enable redaction
+\togglefalse{toggle_redact} % Disable redaction
+\newcommand{\redact}[1]{\iftoggle{toggle_redact}{\rule[-0.3em]{\widthof{#1}}{1em}}{#1}}
+
+% Page number verification functionality
+\newtoggle{toggle_checkpagecount} % Define a new toggle
+\toggletrue{toggle_checkpagecount} % Enable page check
+% \togglefalse{toggle_checkpagecount} % Disable the page check
+
+\newcounter{startpage}
+\newcounter{endpage}
+\newcounter{lettertotalpages}
+
+% Custom bold list environment
+\newlist{bolditemize}{itemize}{1}
+\setlist[bolditemize,1]{before=\bfseries, label=$\bullet$}
+
 % Custom circle indicator for vaccination history charts
 \newcommand{\mycircle}{\raisebox{-0.2\height}{\resizebox{1em}{!}{$\bullet$}}}
 
-% Removes the horizontal line under the header when using fancyhdr
-\renewcommand{\headrulewidth}{0pt}
+% Custom colours
+\definecolor{darkred}{RGB}{153, 0, 0}
+\definecolor{wdgteal}{HTML}{005568}
 
-% Define a command to reset page counter and update last page reference
-\newcommand{\newdocument}{
-  \setcounter{page}{1}
-  \pagestyle{fancy}
-  \fancyhf{}
-  \fancyfoot[C]{Page \thepage\ of \pageref{LastPage}}
-  
-% ltablex setting
-\keepXColumns
+% link-like formatting
+\newcommand{\myurl}[1]{\mbox{\textbf{\textcolor{wdgteal}{\setul{0.5ex}{0.2ex}\setulcolor{wdgteal}\ul{#1}}}}}
+
+% Remove the horizontal lines when using fancyhdr
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Define a command to reset page counter and set up the page style for each letter
+\newcommand{\newdocument}{%
+  \stepcounter{letter}%
+  \setcounter{page}{1}% Reset the page counter for each letter
+  \label{startpage\theletter}% Record the starting page number
+  \pagestyle{fancy}%
+  \fancyhf{}%
+  % Footer content
+  \fancyfoot[C]{
+  \centering
+  Page \thepage\ of \pageref{LastPage\theletter}
+  }
 }
+
+\newcommand{\checkpagecount}[1]{%
+  \iftoggle{toggle_checkpagecount}{%
+    \setcounter{startpage}{\getpagerefnumber{startpage\theletter}}%
+    \setcounter{endpage}{\getpagerefnumber{endpage\theletter}}%
+    \setcounter{lettertotalpages}{\value{endpage} - \value{startpage} + 1}%
+    \ifnum\value{lettertotalpages}=#1%
+      % Page count is as expected; do nothing
+    \else
+      \PackageWarning{mypackage}{%
+        Letter \number\value{letter} starting on page \number\value{startpage}: Physical page count is \number\value{lettertotalpages} but expected #1 pages%
+      }%
+    \fi
+  }{}
+}
+
+% Calculated lengths
+\newlength{\schooltextwidth}
+\settowidth{\schooltextwidth}{School: }
 ```
 
 ```{r, results='asis', echo=FALSE}
@@ -50,18 +111,69 @@ for (j in seq_len(nrow(params$client_data))) {
 "
 \\newdocument
 
-\\huge \\textbf{Immunization Record}
+\\begin{center}
+{\\color{darkred}\\Large \\textbf{Bring this notice to your family doctor or healthcare provider}}
+\\end{center}
 
-\\normalsize Client ID: \\textbf{", client$`Client ID`, "}
+\\vspace{0.5cm}
+
+\\begin{minipage}[c]{0.35\\textwidth}
+  \\includegraphics[width=6cm]{assets/logo.eps}
+\\end{minipage}
+\\hfill
+\\begin{minipage}[c]{0.60\\textwidth}
+  \\raggedleft \\huge \\textbf{Immunization Notice}
+\\end{minipage}
 
 \\vspace{0.25cm}
 
-\\normalsize Below is a record of all immunizations received by the client on file with Public Health, excluding seasonal vaccinations against influenza and COVID-19.
+\\setlength{\\arrayrulewidth}{1.5pt}
+\\renewcommand{\\arraystretch}{2}
+\\setlength{\\tabcolsep}{10pt}
+\\begin{table}[h!]
+    \\begin{tabularx}{\\textwidth}{|X|X|}
+    \\hline ",
+      if(client$`Age 16+`) {"To:"} else {"To the parent/guardian of:"},
+        "\\newline\\redact{\\textbf{", client$Name, "}}
+        \\newline\\newline
+        \\begin{minipage}[t]{\\linewidth}\\raggedright
+            \\textbf{\\redact{", if(!is.na(client$`Street Address Line 1`)) {paste0(client$`Street Address Line 1`, collapse = "")}, "}",
+            if(!is.na(client$`Street Address Line 2`)) {paste0("\\newline ", client$`Street Address Line 2`, collapse = "")},
+            if(!is.na(client$`City`)) {paste0("\\newline ", client$`City`, ", ", client$`Province`, collapse = "")},
+            if(!is.na(client$`Postal Code`)) {paste0(" ", client$`Postal Code`, collapse = "")},
+        "}\\end{minipage}\\newline
+    &
+        Client ID: \\textbf{", client$`Client ID`, "}\\newline\\newline
+        Date of Birth: \\redact{\\textbf{", client$`Date of Birth`, "}}\\newline\\newline
+        School: \\begin{minipage}[t]{\\dimexpr\\linewidth-\\schooltextwidth}\\raggedright
+            \\textbf{", client$`School`, "}
+        \\end{minipage}\\newline
+    \\\\
+    \\hline
+\\end{tabularx}
+\\end{table}
+
+\\normalsize\\raggedright
+Our files show \\redact{\\textbf{", client$Name, "}} has not received the following immunization(s):
+
+\\vspace{0.25cm}
+\\begin{bolditemize}
+\\setlength\\itemsep{-0.5em}
+  \\item ", client$`Vaccines Due LaTeX`, "
+\\end{bolditemize}
+\\vspace{0.25cm}
+
+\\normalsize\\raggedright
+It is the responsibility of the ", if(client$`Age 16+`) {"student or their parent/guardian"} else {"parent/guardian of the student"}, " to update this immunization record by reporting the vaccines received to Public Health. For your reference, a record of all immunizations on file with Public Health for the student, excluding seasonal vaccinations against influenza and COVID-19, has been included below.
+
+For information on immunization exemptions, please visit: \\myurl{https://wdgpublichealth.ca/your-kids/vaccination}.
+
+\\vspace{0.25cm}
 
 \\setlength{\\arrayrulewidth}{1pt}
 \\renewcommand{\\arraystretch}{1.25}
 \\setlength{\\tabcolsep}{1pt}
-
+\\keepXColumns
 \\begin{tabularx}{\\textwidth}{|l|l", rep("|>{\\centering\\arraybackslash}p{0.35cm}", params$chart_num_diseases + 1L), "|>{\\raggedright\\arraybackslash}X|}
 \\hline
 ", params$chart_col_header, "\\\\
@@ -74,15 +186,34 @@ for (j in seq_len(nrow(params$client_data))) {
 \\hline
 \\endhead
 
-\\multicolumn{", params$chart_num_diseases + 4L, "}{c}{{Immunization record continued on next page}} \\\\
+\\multicolumn{", params$chart_num_diseases + 4L, "}{c}{{Immunization record continued on next page}}
 \\endfoot
-
-\\multicolumn{", params$chart_num_diseases + 4L, "}{c}{{End of immunization record}} \\\\
+",
+"\\multicolumn{", params$chart_num_diseases + 4L, "}{c}{{End of immunization record}}
 \\endlastfoot
 ",
 client$`Vaccine History LaTeX`[[1]],
 "
 \\end{tabularx}
+\\needspace{2cm}
+\\null
+\\vspace*{\\fill}
+\\begin{justify}
+{\\footnotesize
+The information in this notice was collected under the authority of the \\textit{Health Protection and Promotion Act} in accordance with the \\textit{Municipal Freedom of Information and Protection of Privacy Act} and the \\textit{Personal Health Information Protection Act}. This information is used for the delivery of public health programs and services; the administration of the agency; and the maintenance of healthcare databases, registries and related research, in compliance with legal and regulatory requirements. Any questions about the management of this information should be addressed to the Chief Privacy Officer at 1-800-265-7293 ext. 2975 or privacy@wdgpublichealth.ca.}
+\\end{justify}
+
+\\label{LastPage\\theletter}
+
+\\ifnum\\value{page}=1
+  \\newpage
+  \\thispagestyle{empty}
+  \\null
+\\fi
+
+\\label{endpage\\theletter}
+
+\\checkpagecount{2}
 
 \\clearpage")
     

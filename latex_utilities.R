@@ -1,3 +1,15 @@
+# Manage special characters in LaTeX
+LaTeX_escape = function(x){
+  x |>
+    str_replace_all(c(
+      "\\\\" = "\\\\textbackslash{}")) |>
+    str_replace_all(c(
+      "\\$"  = "\\\\$",
+      "\\%"  = "\\\\%",
+      "\\&"  = "\\\\&",
+      "\\_"  = "\\\\_",
+      "\\#"  = "\\\\#"))}
+
 # Trim specified number of lines from a string (application to generated LaTeX)
 LaTeX_trim_lines = function(x, drop_top = 0L, drop_bottom = 0L){
   xlines = x |>

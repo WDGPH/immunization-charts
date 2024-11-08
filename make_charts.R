@@ -171,25 +171,32 @@ clients = list.files(
   
   mutate(
     # Formatting of fields
-    `Date of Birth`   = as.Date(`Date of Birth`),
-    
-    # Remove trailing commas
-    `Vaccines Due` = str_remove_all(`Vaccines Due`, pattern = ",$"),
-    `Vaccines Due` = str_replace_all(`Vaccines Due`, pattern = c(
-      "Poliomyelitis" = "Polio",
-      "Human papilloma virus infection" = "Human Papillomavirus (HPV)",
-      "Varicella" = "Varicella (Chickenpox)")),
+    across(`Date of Birth`,
+      \(x) as.Date(x)),
 
-    # Create LaTeX list of due Vaccines
-    `Vaccines Due LaTeX` = str_replace_all(
-      `Vaccines Due`,
-      pattern = ", ",
-      replacement = "\n \\\\item "),
-    
-    `Received Agents` = if_else(
-      condition = str_detect(`Received Agents`, pattern = "^- ,$"),
-      true = NA_character_,
-      false = `Received Agents`),
+    across(`Street Address Line 2`,
+      \(x) if_else(x == "RR N/A", NA_character_, x)),
+
+    across(`Vaccines Due`,
+      \(x) {x |>
+        # Remove trailing commas
+        str_remove_all(
+         pattern = ",$") |>
+          
+        # Refer to diseases by common names
+        str_replace_all(
+         pattern = c(
+          "Poliomyelitis" = "Polio",
+          "Human papilloma virus infection" = "Human Papillomavirus (HPV)",
+          "Varicella" = "Varicella (Chickenpox)")) |>
+          
+        # Create LaTeX list of due immunizations
+        str_replace_all(
+         pattern = ", ",
+          replacement = "\n \\\\item ")}),
+ 
+    across(`Received Agents`,
+      \(x) if_else(str_detect(x, pattern = "^- ,$"), NA_character_, x)),
 
     # Create `Received Agents Table` based on string of vaccinations
     `Received Agents Table` = map2(

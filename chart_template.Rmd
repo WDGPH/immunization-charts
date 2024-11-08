@@ -159,7 +159,7 @@ Our files show \\redact{\\textbf{", client$Name, "}} has not received the follow
 \\vspace{0.25cm}
 \\begin{bolditemize}
 \\setlength\\itemsep{-0.5em}
-  \\item ", client$`Vaccines Due LaTeX`, "
+  \\item ", client$`Vaccines Due`, "
 \\end{bolditemize}
 \\vspace{0.25cm}
 

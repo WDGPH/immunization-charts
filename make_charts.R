@@ -32,11 +32,19 @@ ignore_agents = c(
 # Used to calculate student age at time of mail delivery
 # Students 16 and older can be addressed directly
 # Letters for students under 16 should be addressed to their parent/guardian
-delivery_date = as.Date('2024-11-15')
+delivery_date = as.Date('2025-01-13')
+
+# To include in notice text as date that immunization history is reflective of
+data_date = as.Date('2024-12-11')
 
 # Minimum number of rows to show in immunization history chart
 # Charts will be padded with rows as appropriate
 min_rows = 5L
+
+# Number of clients to include in a single PDF
+# Note: 10 PDFs with 10 clients each will run slower than 1 PDF with 100 clients
+# Use a batch size of 1 if you would like a single client per PDF file.
+batch_size = 100L
 
 ##################
 # End parameters #
@@ -133,23 +141,22 @@ clients = list.files(
     readxl::read_xlsx(
       path = x,
       col_types = c(
-        rep("text", 7),
+        rep("text", 11),
         rep("date", 1),
-        rep("text", 8))) |>
-    select(
-      `School` = `School Name`,
-      `Client ID` = `Client Id`,
-      `First Name`,
-      `Last Name`,
-      `Date of Birth`,
-      `Street Address Line 1`,
-      `Street Address Line 2`,
-      `City`,
-      `Province` = `Province/Territory`,
-      `Postal Code`,
-      `Vaccines Due` = `Overdue Disease`,
-      `Received Agents` = `Imms Given`
-      )
+        rep("text", 42))) |>
+      select(
+        `School` = `School/ Daycare`,
+        `Client ID`,
+        `First Name`,
+        `Last Name`,
+        `Date of Birth`,
+        `Street Address`,
+        `City`,
+        `Province`,
+        `Postal Code`,
+        `Vaccines Due` = `Disease(s)/Agent(s)`,
+        `Received Agents` = `Overdue ISPA+.Imms Given`
+        )
     }) |>
 
   # Bind list of data frames
@@ -160,7 +167,8 @@ clients = list.files(
     across(
     .cols = all_of(c(
       "School", "First Name", "Last Name",
-      "Street Address Line 1", "Street Address Line 2",
+      "Street Address",
+      # "Street Address Line 1", "Street Address Line 2",
       "City", "Province", "Postal Code")),
     .fns = \(x){
       x |>
@@ -173,9 +181,6 @@ clients = list.files(
     # Formatting of fields
     across(`Date of Birth`,
       \(x) as.Date(x)),
-
-    across(`Street Address Line 2`,
-      \(x) if_else(x == "RR N/A", NA_character_, x)),
 
     across(`Vaccines Due`,
       \(x) {x |>
@@ -312,8 +317,8 @@ clients = clients |>
   nest_by(`School`, .keep = T) |>
   use_series(data) |>
   map(\(x) {
-    x |>
-    nest_by(`Birth Year`, .keep = T) |>
+   x |>
+    nest_by(batch = 1 + (row_number() - 1) %/% batch_size, .keep = T) |>
     use_series(data)
   })
 
@@ -322,9 +327,9 @@ for (iter_facility in seq_along(clients)) {
   for (iter_batch in seq_along(clients[[iter_facility]])) {
     notice_data = clients[[iter_facility]][[iter_batch]]
     notice_filename = paste0(
-      str_replace_all(notice_data$`School`[1], "\\W+", "_"),
+      str_replace_all(notice_data$School[1], "\\W+", "_"),
       "_",
-      notice_data$`Birth Year`[1],
+      notice_data$batch[1],
       ".pdf")
     
     cat("Building:", notice_filename, "\n")
@@ -335,6 +340,7 @@ for (iter_facility in seq_along(clients)) {
       output_dir = "output",
       params = list(
         client_data = notice_data,
+        data_date = format(data_date, "%B %d, %Y"),
         chart_num_diseases = chart_num_diseases,
         chart_col_header = chart_col_header),
       quiet = T)

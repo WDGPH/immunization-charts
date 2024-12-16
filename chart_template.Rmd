@@ -30,7 +30,7 @@ params:
   client_data: NULL
   chart_num_diseases: NULL
   chart_col_header: NULL
-  
+  data_date: NULL
 ---
 
 ```{=latex}
@@ -137,8 +137,7 @@ for (j in seq_len(nrow(params$client_data))) {
         "\\newline\\redact{\\textbf{", client$Name, "}}
         \\newline\\newline
         \\begin{minipage}[t]{\\linewidth}\\raggedright
-            \\textbf{\\redact{", if(!is.na(client$`Street Address Line 1`)) {paste0(client$`Street Address Line 1`, collapse = "")}, "}",
-            if(!is.na(client$`Street Address Line 2`)) {paste0("\\newline ", client$`Street Address Line 2`, collapse = "")},
+            \\textbf{\\redact{", if(!is.na(client$`Street Address`)) {paste0(client$`Street Address`, collapse = "")}, "}",
             if(!is.na(client$`City`)) {paste0("\\newline ", client$`City`, ", ", client$`Province`, collapse = "")},
             if(!is.na(client$`Postal Code`)) {paste0(" ", client$`Postal Code`, collapse = "")},
         "}\\end{minipage}\\newline
@@ -154,7 +153,7 @@ for (j in seq_len(nrow(params$client_data))) {
 \\end{table}
 
 \\normalsize\\raggedright
-Our files show \\redact{\\textbf{", client$Name, "}} has not received the following immunization(s):
+As of \\textbf{", params$data_date, "}, our files show \\redact{\\textbf{", client$Name, "}} has not received the following immunization(s):
 
 \\vspace{0.25cm}
 \\begin{bolditemize}
